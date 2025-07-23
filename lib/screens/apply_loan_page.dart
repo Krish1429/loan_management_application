@@ -29,15 +29,31 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
 
   File? aadhaarFile;
   File? panFile;
+  String? aadhaarFileName;
+  String? panFileName;
+
+  final List<String> loanTypes = [
+    'Home Loan',
+    'Education Loan',
+    'Business Loan',
+    'Personal Loan',
+    'Vehicle Loan',
+    'Medical Loan',
+  ];
 
   Future<void> pickFile(bool isAadhaar) async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.any);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+    );
     if (result != null && result.files.single.path != null) {
       setState(() {
         if (isAadhaar) {
           aadhaarFile = File(result.files.single.path!);
+          aadhaarFileName = result.files.single.name;
         } else {
           panFile = File(result.files.single.path!);
+          panFileName = result.files.single.name;
         }
       });
     }
@@ -61,6 +77,30 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload Aadhaar and PAN files')));
       return;
     }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Loan Details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Name: ${firstNameController.text} ${lastNameController.text}'),
+            Text('Aadhaar: ${aadhaarNumberController.text}'),
+            Text('PAN: ${panNumberController.text}'),
+            Text('Amount: ₹${amountController.text}'),
+            Text('Purpose: ${purposeController.text}'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Confirm')),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
 
     setState(() => isLoading = true);
 
@@ -112,12 +152,45 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
               TextFormField(controller: dobController, decoration: const InputDecoration(labelText: 'Date of Birth (YYYY-MM-DD)'), validator: _required),
               TextFormField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone Number'), validator: _required),
               TextFormField(controller: addressController, decoration: const InputDecoration(labelText: 'Address'), validator: _required),
-              TextFormField(controller: aadhaarNumberController, decoration: const InputDecoration(labelText: 'Aadhaar Number'), validator: _required),
-              TextFormField(controller: panNumberController, decoration: const InputDecoration(labelText: 'PAN Number'), validator: _required),
+              TextFormField(
+                controller: aadhaarNumberController,
+                decoration: const InputDecoration(labelText: 'Aadhaar Number'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) return 'This field is required';
+                  final cleaned = value.replaceAll(RegExp(r'\s+'), ''); // remove spaces
+final aadhaarReg = RegExp(r'^\d{12}$');
+return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar number';
+
+                },
+              ),
+              TextFormField(
+                controller: panNumberController,
+                decoration: const InputDecoration(labelText: 'PAN Number'),
+                validator: (value) {
+                  if (value == null || value.isEmpty) return 'This field is required';
+                  final panReg = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$');
+                  return panReg.hasMatch(value) ? null : 'Enter valid PAN number (e.g., ABCDE1234F)';
+                },
+              ),
               TextFormField(controller: occupationController, decoration: const InputDecoration(labelText: 'Occupation'), validator: _required),
               TextFormField(controller: incomeController, decoration: const InputDecoration(labelText: 'Monthly Income'), keyboardType: TextInputType.number, validator: _required),
               TextFormField(controller: amountController, decoration: const InputDecoration(labelText: 'Loan Amount'), keyboardType: TextInputType.number, validator: _required),
-              TextFormField(controller: purposeController, decoration: const InputDecoration(labelText: 'Loan Purpose'), validator: _required),
+              DropdownButtonFormField<String>(
+                decoration: const InputDecoration(labelText: 'Loan Purpose'),
+                value: purposeController.text.isNotEmpty ? purposeController.text : null,
+                items: loanTypes.map((type) {
+                  return DropdownMenuItem(
+                    value: type,
+                    child: Text(type),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    purposeController.text = value!;
+                  });
+                },
+                validator: (value) => value == null || value.isEmpty ? 'Please select loan purpose' : null,
+              ),
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -125,7 +198,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                     child: OutlinedButton.icon(
                       onPressed: () => pickFile(true),
                       icon: const Icon(Icons.file_upload),
-                      label: Text(aadhaarFile != null ? 'Aadhaar Uploaded' : 'Upload Aadhaar'),
+                      label: Text(aadhaarFileName != null ? 'Aadhaar: $aadhaarFileName' : 'Upload Aadhaar'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -133,7 +206,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                     child: OutlinedButton.icon(
                       onPressed: () => pickFile(false),
                       icon: const Icon(Icons.file_upload),
-                      label: Text(panFile != null ? 'PAN Uploaded' : 'Upload PAN'),
+                      label: Text(panFileName != null ? 'PAN: $panFileName' : 'Upload PAN'),
                     ),
                   ),
                 ],

@@ -12,53 +12,50 @@ class SignUpPage extends StatefulWidget {
 
 class _SignUpPageState extends State<SignUpPage> {
   final nameController = TextEditingController();
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
   final phoneController = TextEditingController();
   final ageController = TextEditingController();
-
-  String selectedRole = 'Loan Borrower'; // default
-
-  bool isLoading = false;
-  final _formKey = GlobalKey<FormState>();
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  String selectedRole = 'Loan Borrower';
 
   final roles = ['Loan Borrower', 'Merchant', 'NBFC Admin'];
+  final _formKey = GlobalKey<FormState>();
+  bool isLoading = false;
 
   Future<void> signUp() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => isLoading = true);
-
     final email = emailController.text.trim();
     final password = passwordController.text;
-    final name = nameController.text.trim();
-    final phone = phoneController.text.trim();
-    final age = int.tryParse(ageController.text.trim()) ?? 0;
 
     try {
-      final response = await supabase.auth.signUp(email: email, password: password);
+      final response = await supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
 
-      final userId = response.user?.id;
-
-      if (userId != null) {
+      final user = response.user;
+      if (user != null) {
         await supabase.from('user_profiles').insert({
-          'id': userId,
-          'username': name,
+          'id': user.id,
+          'username': nameController.text.trim(),
           'email': email,
-          'phone': phone,
+          'password': password,
           'sign_up_as': selectedRole,
-          'age': age,
+          'phone': phoneController.text.trim(),
+          'age': int.tryParse(ageController.text.trim()) ?? 0,
         });
-      }
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Signup successful! Please login.')),
-        );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const LoginPage()),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Account created successfully!')),
+          );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => const LoginPage()),
+          );
+        }
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -69,18 +66,40 @@ class _SignUpPageState extends State<SignUpPage> {
     setState(() => isLoading = false);
   }
 
+  InputDecoration _inputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: Colors.white70),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      enabledBorder: OutlineInputBorder(
+        borderSide: const BorderSide(color: Colors.white24),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderSide: const BorderSide(color: Colors.white),
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('Sign Up')),
+      backgroundColor: const Color(0xFF1A171E),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: const Text('Sign Up'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
-              const Text('Create a new account', style: TextStyle(fontSize: 20)),
+              const Text(
+                'Create your account',
+                style: TextStyle(fontSize: 20, color: Colors.white),
+              ),
               const SizedBox(height: 20),
 
               TextFormField(
@@ -92,29 +111,10 @@ class _SignUpPageState extends State<SignUpPage> {
               const SizedBox(height: 10),
 
               TextFormField(
-                controller: emailController,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Email'),
-                keyboardType: TextInputType.emailAddress,
-                validator: (val) => val!.isEmpty ? 'Enter email' : null,
-              ),
-              const SizedBox(height: 10),
-
-              TextFormField(
-                controller: passwordController,
-                style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Password'),
-                obscureText: true,
-                validator: (val) => val!.length < 6 ? 'Min 6 characters' : null,
-              ),
-              const SizedBox(height: 10),
-
-              TextFormField(
                 controller: phoneController,
                 style: const TextStyle(color: Colors.white),
-                decoration: _inputDecoration('Phone Number'),
-                keyboardType: TextInputType.phone,
-                validator: (val) => val!.isEmpty ? 'Enter phone number' : null,
+                decoration: _inputDecoration('Phone'),
+                validator: (val) => val!.isEmpty ? 'Enter phone' : null,
               ),
               const SizedBox(height: 10),
 
@@ -124,6 +124,23 @@ class _SignUpPageState extends State<SignUpPage> {
                 decoration: _inputDecoration('Age'),
                 keyboardType: TextInputType.number,
                 validator: (val) => val!.isEmpty ? 'Enter age' : null,
+              ),
+              const SizedBox(height: 10),
+
+              TextFormField(
+                controller: emailController,
+                style: const TextStyle(color: Colors.white),
+                decoration: _inputDecoration('Email'),
+                validator: (val) => val!.isEmpty ? 'Enter email' : null,
+              ),
+              const SizedBox(height: 10),
+
+              TextFormField(
+                controller: passwordController,
+                obscureText: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: _inputDecoration('Password'),
+                validator: (val) => val!.length < 6 ? 'Min 6 characters' : null,
               ),
               const SizedBox(height: 10),
 
@@ -145,12 +162,19 @@ class _SignUpPageState extends State<SignUpPage> {
 
               ElevatedButton(
                 onPressed: isLoading ? null : signUp,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  minimumSize: const Size.fromHeight(50),
+                ),
                 child: isLoading
                     ? const CircularProgressIndicator()
                     : const Text('Sign Up'),
               ),
-
               const SizedBox(height: 10),
+
               TextButton(
                 onPressed: () {
                   Navigator.pushReplacement(
@@ -158,7 +182,7 @@ class _SignUpPageState extends State<SignUpPage> {
                     MaterialPageRoute(builder: (_) => const LoginPage()),
                   );
                 },
-                child: const Text("Already have an account? Log in"),
+                child: const Text("Already have an account? Login", style: TextStyle(color: Colors.white70)),
               ),
             ],
           ),
@@ -166,21 +190,6 @@ class _SignUpPageState extends State<SignUpPage> {
       ),
     );
   }
-
-  InputDecoration _inputDecoration(String label) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: const TextStyle(color: Colors.white70),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-      enabledBorder: OutlineInputBorder(
-        borderSide: const BorderSide(color: Colors.white30),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderSide: const BorderSide(color: Colors.white),
-        borderRadius: BorderRadius.circular(10),
-      ),
-    );
-  }
 }
+
 

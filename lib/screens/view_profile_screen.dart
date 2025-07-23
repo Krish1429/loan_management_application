@@ -1,66 +1,120 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../supabase_client.dart';
-import 'login_page.dart'; // Make sure you have this page created
+import 'login_page.dart';
 
-class ViewProfileScreen extends StatelessWidget {
+class ViewProfileScreen extends StatefulWidget {
   const ViewProfileScreen({super.key});
 
-  Future<Map<String, dynamic>?> fetchProfile() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return null;
+  @override
+  State<ViewProfileScreen> createState() => _ViewProfileScreenState();
+}
 
-    final profile = await supabase
-        .from('user_profiles')
-        .select()
-        .eq('id', user.id)
-        .single();
+class _ViewProfileScreenState extends State<ViewProfileScreen> {
+  Map<String, dynamic>? profile;
 
-    return profile;
+  @override
+  void initState() {
+    super.initState();
+    fetchProfile();
   }
 
-  void logout(BuildContext context) async {
-    await supabase.auth.signOut();
+  Future<void> fetchProfile() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId != null) {
+      final response = await supabase
+          .from('user_profiles')
+          .select()
+          .eq('id', userId)
+          .single();
 
-    // Clear navigation stack and go to login page
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
+      setState(() {
+        profile = response;
+      });
+    }
+  }
+
+  void logout() async {
+    await supabase.auth.signOut();
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, dynamic>?>(
-      future: fetchProfile(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-        if (!snapshot.hasData || snapshot.data == null) return const Center(child: Text('No profile found'));
+    final name = profile?['username'] ?? '';
+    final email = profile?['email'] ?? '';
+    final phone = profile?['phone'] ?? '';
+    final role = profile?['sign_up_as'] ?? '';
 
-        final data = snapshot.data!;
-        return Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Name: ${data['username']}', style: const TextStyle(fontSize: 18)),
-              Text('Email: ${data['email']}'),
-              Text('Phone: ${data['phone']}'),
-              Text('Role: ${data['sign_up_as']}'),
-              const Spacer(),
-              Center(
-                child: ElevatedButton.icon(
-                  onPressed: () => logout(context),
-                  icon: const Icon(Icons.logout),
-                  label: const Text('Logout'),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Profile'),
+        centerTitle: true,
+      ),
+      body: profile == null
+          ? const Center(child: CircularProgressIndicator())
+          : Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  Center(
+                    child: CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.deepPurple,
+                      child: Text(
+                        name.isNotEmpty ? name[0].toUpperCase() : '',
+                        style: const TextStyle(fontSize: 28, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+                  profileItem('Name', name),
+                  profileItem('Email', email),
+                  profileItem('Phone', phone),
+                  profileItem('Role', role),
+                  const Spacer(),
+                  Center(
+                    child: ElevatedButton.icon(
+                      onPressed: logout,
+                      icon: const Icon(Icons.logout),
+                      label: const Text('Logout'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
+    );
+  }
+
+  Widget profileItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
-        );
-      },
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 16),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
-

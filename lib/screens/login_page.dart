@@ -44,13 +44,13 @@ class _LoginPageState extends State<LoginPage> {
             .eq('id', user.id)
             .maybeSingle();
 
-if (userData == null) {
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('User profile not found.')),
-  );
-  setState(() => isLoading = false);
-  return;
-}
+        if (userData == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('User profile not found.')),
+          );
+          setState(() => isLoading = false);
+          return;
+        }
 
         final role = userData['sign_up_as'];
 
@@ -64,7 +64,7 @@ if (userData == null) {
           if (role == 'Loan Borrower') {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => const LoanBorrowerDashboardScreen()),
+              MaterialPageRoute(builder: (_) => const LoanBorrowerDashboard()),
             );
           } else if (role == 'Merchant') {
             Navigator.pushReplacement(
@@ -91,15 +91,21 @@ if (userData == null) {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(title: const Text('Login')),
+      backgroundColor: const Color(0xFF1A171E),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: const Text('Login'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
-              const Text('Login to your account', style: TextStyle(fontSize: 20)),
+              const Text(
+                'Login to your account',
+                style: TextStyle(fontSize: 20, color: Colors.white),
+              ),
               const SizedBox(height: 20),
 
               TextFormField(
@@ -136,6 +142,13 @@ if (userData == null) {
               const SizedBox(height: 20),
 
               ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.deepPurple,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(25),
+                  ),
+                  minimumSize: const Size.fromHeight(50),
+                ),
                 onPressed: isLoading ? null : login,
                 child: isLoading
                     ? const CircularProgressIndicator()
@@ -150,7 +163,7 @@ if (userData == null) {
                     MaterialPageRoute(builder: (_) => const SignUpPage()),
                   );
                 },
-                child: const Text("Don't have an account? Sign up"),
+                child: const Text("Don't have an account? Sign up", style: TextStyle(color: Colors.white70)),
               ),
             ],
           ),
@@ -175,3 +188,4 @@ if (userData == null) {
     );
   }
 }
+

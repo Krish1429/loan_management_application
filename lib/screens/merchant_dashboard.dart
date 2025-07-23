@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'manage_products_screen.dart';
 import 'view_profile_screen.dart';
 import 'merchant_loans_screen.dart';
-import 'referral_loan_page.dart'; // ✅ import this
+import 'referral_loan_page.dart';
 
 class MerchantDashboardScreen extends StatefulWidget {
   const MerchantDashboardScreen({super.key});
@@ -13,6 +14,7 @@ class MerchantDashboardScreen extends StatefulWidget {
 
 class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
   int _selectedIndex = 0;
+  String userName = '';
 
   final List<Widget> _screens = const [
     MerchantLoansScreen(),
@@ -25,6 +27,26 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     'Manage Products',
     'My Profile',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    fetchUserName();
+  }
+
+  Future<void> fetchUserName() async {
+    final userId = Supabase.instance.client.auth.currentUser?.id;
+
+    final response = await Supabase.instance.client
+        .from('user_profiles')
+        .select('username')
+        .eq('id', userId)
+        .maybeSingle();
+
+    setState(() {
+      userName = response?['username'] ?? '';
+    });
+  }
 
   void _onTabTapped(int index) {
     setState(() => _selectedIndex = index);
@@ -40,9 +62,26 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_titles[_selectedIndex])),
+      backgroundColor: const Color(0xFF1A171E),
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(_titles[_selectedIndex]),
+            if (userName.isNotEmpty)
+              Text(
+                'Welcome, $userName 👋',
+                style: const TextStyle(fontSize: 14, color: Colors.white70),
+              ),
+          ],
+        ),
+      ),
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Colors.black,
+        selectedItemColor: Colors.deepPurpleAccent,
+        unselectedItemColor: Colors.white60,
         currentIndex: _selectedIndex,
         onTap: _onTabTapped,
         items: const [
@@ -52,6 +91,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: Colors.deepPurple,
         onPressed: _goToReferralForm,
         icon: const Icon(Icons.person_add_alt),
         label: const Text('Refer a Loan'),
@@ -59,5 +99,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     );
   }
 }
+
+
 
 
