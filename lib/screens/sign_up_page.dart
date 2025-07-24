@@ -41,7 +41,7 @@ class _SignUpPageState extends State<SignUpPage> {
           'id': user.id,
           'username': nameController.text.trim(),
           'email': email,
-          'password': password,
+          
           'sign_up_as': selectedRole,
           'phone': phoneController.text.trim(),
           'age': int.tryParse(ageController.text.trim()) ?? 0,

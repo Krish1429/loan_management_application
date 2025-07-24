@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../supabase_client.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-
 class MerchantLoansScreen extends StatefulWidget {
   const MerchantLoansScreen({super.key});
 
@@ -21,9 +20,12 @@ class _MerchantLoansScreenState extends State<MerchantLoansScreen> {
   }
 
   Future<void> fetchLoanRequests() async {
+    final merchantId = supabase.auth.currentUser?.id;
+
     final response = await supabase
         .from('loans')
         .select()
+        .eq('referred_by', merchantId) // ✅ Filter: only show referred loans
         .order('created_at', ascending: false);
 
     setState(() {
@@ -32,27 +34,25 @@ class _MerchantLoansScreenState extends State<MerchantLoansScreen> {
     });
   }
 
-void _openUrl(String filePath) async {
-  // Generate public URL from Supabase storage
-  final publicUrl = supabase.storage.from('documents').getPublicUrl(filePath);
+  void _openUrl(String filePath) async {
+    final publicUrl = supabase.storage.from('documents').getPublicUrl(filePath);
+    final uri = Uri.parse(publicUrl);
 
-  final uri = Uri.parse(publicUrl);
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  } else {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Could not open document')),
-    );
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open document')),
+      );
+    }
   }
-}
-
 
   @override
   Widget build(BuildContext context) {
     return isLoading
         ? const Center(child: CircularProgressIndicator())
         : loanRequests.isEmpty
-            ? const Center(child: Text('No loan requests found'))
+            ? const Center(child: Text('No referred loan requests found'))
             : ListView.builder(
                 itemCount: loanRequests.length,
                 itemBuilder: (context, index) {
@@ -93,3 +93,4 @@ void _openUrl(String filePath) async {
               );
   }
 }
+

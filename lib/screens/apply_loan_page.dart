@@ -24,7 +24,7 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
   final panNumberController = TextEditingController();
   final occupationController = TextEditingController();
   final incomeController = TextEditingController();
-  final amountController = TextEditingController();
+  final amountController = TextEditingController(text: '0');
   final purposeController = TextEditingController();
 
   File? aadhaarFile;
@@ -40,6 +40,8 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
     'Vehicle Loan',
     'Medical Loan',
   ];
+
+  double loanAmount = 0;
 
   Future<void> pickFile(bool isAadhaar) async {
     final result = await FilePicker.platform.pickFiles(
@@ -73,8 +75,18 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
 
   Future<void> submitLoan() async {
     if (!_formKey.currentState!.validate()) return;
+
     if (aadhaarFile == null || panFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please upload Aadhaar and PAN files')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please upload Aadhaar and PAN files')),
+      );
+      return;
+    }
+
+    if (loanAmount < 5000) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Loan amount must be at least ₹5,000')),
+      );
       return;
     }
 
@@ -119,19 +131,23 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
         'pan_number': panNumberController.text.trim(),
         'occupation': occupationController.text.trim(),
         'monthly_income': double.tryParse(incomeController.text.trim()) ?? 0,
-        'loan_amount': double.tryParse(amountController.text.trim()) ?? 0,
+        'loan_amount': loanAmount,
         'loan_purpose': purposeController.text.trim(),
         'aadhaar_url': aadhaarUrl,
         'pan_url': panUrl,
       });
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Loan request submitted')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Loan request submitted')),
+        );
         Navigator.pop(context);
       }
     } catch (e) {
       debugPrint('Error submitting loan: $e');
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Submission failed')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Submission failed')),
+      );
     }
 
     setState(() => isLoading = false);
@@ -157,10 +173,9 @@ class _ApplyLoanPageState extends State<ApplyLoanPage> {
                 decoration: const InputDecoration(labelText: 'Aadhaar Number'),
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'This field is required';
-                  final cleaned = value.replaceAll(RegExp(r'\s+'), ''); // remove spaces
-final aadhaarReg = RegExp(r'^\d{12}$');
-return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar number';
-
+                  final cleaned = value.replaceAll(RegExp(r'\s+'), '');
+                  final aadhaarReg = RegExp(r'^\d{12}$');
+                  return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar number';
                 },
               ),
               TextFormField(
@@ -174,7 +189,26 @@ return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar numbe
               ),
               TextFormField(controller: occupationController, decoration: const InputDecoration(labelText: 'Occupation'), validator: _required),
               TextFormField(controller: incomeController, decoration: const InputDecoration(labelText: 'Monthly Income'), keyboardType: TextInputType.number, validator: _required),
-              TextFormField(controller: amountController, decoration: const InputDecoration(labelText: 'Loan Amount'), keyboardType: TextInputType.number, validator: _required),
+
+              const SizedBox(height: 16),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Loan Amount (₹0 - ₹65,000)', style: TextStyle(fontSize: 16)),
+              ),
+              Slider(
+                value: loanAmount,
+                min: 0,
+                max: 65000,
+                divisions: 13,
+                label: '₹${loanAmount.toInt()}',
+                onChanged: (value) {
+                  setState(() {
+                    loanAmount = value;
+                    amountController.text = value.toInt().toString();
+                  });
+                },
+              ),
+
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Loan Purpose'),
                 value: purposeController.text.isNotEmpty ? purposeController.text : null,
@@ -191,6 +225,7 @@ return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar numbe
                 },
                 validator: (value) => value == null || value.isEmpty ? 'Please select loan purpose' : null,
               ),
+
               const SizedBox(height: 10),
               Row(
                 children: [
@@ -228,3 +263,4 @@ return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar numbe
     return null;
   }
 }
+

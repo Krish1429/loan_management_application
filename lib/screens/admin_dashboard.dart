@@ -9,9 +9,12 @@ class AdminDashboardScreen extends StatefulWidget {
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+class _AdminDashboardScreenState extends State<AdminDashboardScreen>
+    with SingleTickerProviderStateMixin {
   List<Map<String, dynamic>> allLoans = [];
-  Map<String, String> merchantNames = {}; // Referrer names
+  List<Map<String, dynamic>> directLoans = [];
+  List<Map<String, dynamic>> referredLoans = [];
+  Map<String, String> merchantNames = {};
   String selectedStatus = 'pending';
   bool isLoading = true;
 
@@ -20,10 +23,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
-    fetchLoansByStatus();
+    fetchLoans();
   }
 
-  Future<void> fetchLoansByStatus() async {
+  Future<void> fetchLoans() async {
     setState(() => isLoading = true);
 
     final response = await supabase
@@ -35,8 +38,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final loans = List<Map<String, dynamic>>.from(response);
 
     final referredIds = loans
-        .map((loan) => loan['referred_by'])
-        .where((id) => id != null)
+        .map((loan) => loan['referred_by']?.toString())
+        .where((id) => id != null && id.isNotEmpty)
         .toSet()
         .toList();
 
@@ -44,22 +47,28 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       final refData = await supabase
           .from('user_profiles')
           .select('id, username')
-          .in_('id', referredIds); // ✅ Replace inFilter with in_()
+          .in_('id', referredIds);
 
       merchantNames = {
-        for (var m in refData) m['id']: m['username']
+        for (var m in refData)
+          if (m['id'] != null && m['username'] != null)
+            m['id'].toString(): m['username']
       };
     }
 
     setState(() {
       allLoans = loans;
+      directLoans =
+          loans.where((loan) => loan['referred_by'] == null).toList();
+      referredLoans =
+          loans.where((loan) => loan['referred_by'] != null).toList();
       isLoading = false;
     });
   }
 
   Future<void> updateLoanStatus(String loanId, String newStatus) async {
     await supabase.from('loans').update({'status': newStatus}).eq('id', loanId);
-    fetchLoansByStatus();
+    fetchLoans();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,97 +119,131 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
+  Widget buildLoanList(List<Map<String, dynamic>> loans) {
+    return loans.isEmpty
+        ? const Center(child: Text('No loans found'))
+        : ListView.builder(
+            itemCount: loans.length,
+            itemBuilder: (context, index) {
+              final loan = loans[index];
+              final referredById = loan['referred_by']?.toString();
+String merchantName = merchantNames[referredById] ?? '';
+
+if (merchantName.isEmpty && merchantNames.isNotEmpty) {
+  print('📦 Loan: ${loan['id']} referred_by: ${loan['referred_by']} -> ${merchantNames[loan['referred_by']]}');
+
+}
+
+
+              return Card(
+                margin: const EdgeInsets.all(10),
+                child: ExpansionTile(
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${loan['first_name'] ?? ''} ${loan['last_name'] ?? ''}',
+                        ),
+                      ),
+                      if (referredById != null)
+                        const Chip(
+                          label: Text('Referred',
+                              style: TextStyle(color: Colors.white)),
+                          backgroundColor: Colors.deepPurple,
+                        ),
+                    ],
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                          '₹${loan['loan_amount']} - ${loan['loan_purpose']}'),
+                      if (merchantName.isNotEmpty)
+                        Text('Referred by: $merchantName',
+                            style: const TextStyle(fontSize: 12)),
+                    ],
+                  ),
+                  children: [
+                    ListTile(title: Text('Phone: ${loan['phone']}')),
+                    ListTile(title: Text('Occupation: ${loan['occupation']}')),
+                    ListTile(title: Text('Status: ${loan['status']}')),
+                    ButtonBar(
+                      alignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () =>
+                              updateLoanStatus(loan['id'], 'approved'),
+                          child: const Text('Approve'),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              updateLoanStatus(loan['id'], 'rejected'),
+                          child: const Text('Reject'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            },
+          );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('NBFC Admin Dashboard'),
-        actions: [
-          IconButton(onPressed: viewProfile, icon: const Icon(Icons.person)),
-          IconButton(onPressed: logout, icon: const Icon(Icons.logout)),
-          DropdownButton<String>(
-            value: selectedStatus,
-            dropdownColor: Colors.grey[900],
-            underline: const SizedBox(),
-            icon: const Icon(Icons.filter_list, color: Colors.white),
-            items: statusOptions
-                .map((status) => DropdownMenuItem(
-                      value: status,
-                      child: Text(
-                        status[0].toUpperCase() + status.substring(1),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ))
-                .toList(),
-            onChanged: (value) {
-              if (value != null) {
-                setState(() => selectedStatus = value);
-                fetchLoansByStatus();
-              }
-            },
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('NBFC Admin Dashboard'),
+          actions: [
+            IconButton(onPressed: viewProfile, icon: const Icon(Icons.person)),
+            IconButton(onPressed: logout, icon: const Icon(Icons.logout)),
+            DropdownButton<String>(
+              value: selectedStatus,
+              dropdownColor: Colors.grey[900],
+              underline: const SizedBox(),
+              icon: const Icon(Icons.filter_list, color: Colors.white),
+              items: statusOptions
+                  .map((status) => DropdownMenuItem(
+                        value: status,
+                        child: Text(
+                          status[0].toUpperCase() + status.substring(1),
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ))
+                  .toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  setState(() => selectedStatus = value);
+                  fetchLoans();
+                }
+              },
+            ),
+          ],
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: 'All'),
+              Tab(text: 'Direct'),
+              Tab(text: 'Referred'),
+            ],
           ),
-        ],
+        ),
+        body: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [
+                  buildLoanList(allLoans),
+                  buildLoanList(directLoans),
+                  buildLoanList(referredLoans),
+                ],
+              ),
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : allLoans.isEmpty
-              ? Center(child: Text('No $selectedStatus loans'))
-              : ListView.builder(
-                  itemCount: allLoans.length,
-                  itemBuilder: (context, index) {
-                    final loan = allLoans[index];
-                    final merchantName = merchantNames[loan['referred_by']] ?? '';
-
-                    return Card(
-                      margin: const EdgeInsets.all(10),
-                      child: ExpansionTile(
-                        title: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                  '${loan['first_name'] ?? ''} ${loan['last_name'] ?? ''}'),
-                            ),
-                            if (loan['referred_by'] != null)
-                              const Chip(
-                                label: Text('Referred',
-                                    style: TextStyle(color: Colors.white)),
-                                backgroundColor: Colors.deepPurple,
-                              ),
-                          ],
-                        ),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('₹${loan['loan_amount']} - ${loan['loan_purpose']}'),
-                            if (merchantName.isNotEmpty)
-                              Text('Referred by: $merchantName',
-                                  style: const TextStyle(fontSize: 12)),
-                          ],
-                        ),
-                        children: [
-                          ListTile(title: Text('Phone: ${loan['phone']}')),
-                          ListTile(title: Text('Occupation: ${loan['occupation']}')),
-                          ListTile(title: Text('Status: ${loan['status']}')),
-                          ButtonBar(
-                            alignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              TextButton(
-                                onPressed: () =>
-                                    updateLoanStatus(loan['id'], 'approved'),
-                                child: const Text('Approve'),
-                              ),
-                              TextButton(
-                                onPressed: () =>
-                                    updateLoanStatus(loan['id'], 'rejected'),
-                                child: const Text('Reject'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
     );
   }
 }
+
+
+
+
+
