@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:loan_management_application/screens/notifications_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../supabase_client.dart';
 import 'login_page.dart';
 
@@ -67,7 +69,30 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Future<void> updateLoanStatus(String loanId, String newStatus) async {
+    // Step 1: Update the loan status
     await supabase.from('loans').update({'status': newStatus}).eq('id', loanId);
+
+    // Step 2: Fetch the loan details
+    final loan = await supabase.from('loans').select().eq('id', loanId).single();
+
+    // Step 3: Notify the loan applicant
+    await supabase.from('notifications').insert({
+      'user_id': loan['user_id'],
+      'message': 'Your loan has been $newStatus.',
+      'type': 'loan',
+    });
+
+    // Step 4: Notify the merchant if referred
+    if (loan['referred_by'] != null) {
+      await supabase.from('notifications').insert({
+        'user_id': loan['referred_by'],
+        'message':
+            'A loan you referred was $newStatus for ₹${loan['loan_amount']} (${loan['loan_purpose']}).',
+        'type': 'loan',
+      });
+    }
+
+    // Step 5: Refresh list
     fetchLoans();
 
     if (mounted) {
@@ -95,26 +120,112 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         .eq('id', userId)
         .single();
 
+    final usernameController = TextEditingController(text: profile['username']);
+    final emailController = TextEditingController(text: profile['email'] ?? '');
+    final phoneController = TextEditingController(text: profile['phone'] ?? '');
+    final ageController =
+        TextEditingController(text: profile['age']?.toString() ?? '');
+
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('My Profile'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Name: ${profile['username']}'),
-            Text('Email: ${profile['email']}'),
-            Text('Phone: ${profile['phone']}'),
-            Text('Age: ${profile['age']}'),
-            Text('Role: ${profile['sign_up_as']}'),
-          ],
+        title: const Text('Edit Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            children: [
+              TextFormField(
+                controller: usernameController,
+                decoration: const InputDecoration(labelText: 'Name'),
+              ),
+              TextFormField(
+                controller: emailController,
+                decoration: const InputDecoration(labelText: 'Email'),
+              ),
+              TextFormField(
+                controller: phoneController,
+                decoration: const InputDecoration(labelText: 'Phone'),
+              ),
+              TextFormField(
+                controller: ageController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Age'),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Close')),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              await supabase.from('user_profiles').update({
+                'username': usernameController.text.trim(),
+                'email': emailController.text.trim(),
+                'phone': phoneController.text.trim(),
+                'age': int.tryParse(ageController.text.trim()) ?? 0,
+              }).eq('id', userId);
+
+              if (mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Profile updated')),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
         ],
+      ),
+    );
+  }
+
+  void showLoanDetails(Map<String, dynamic> loan) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1A171E),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Text('Full Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            const SizedBox(height: 10),
+            Text('Name: ${loan['first_name']} ${loan['last_name']}', style: const TextStyle(color: Colors.white)),
+            Text('Phone: ${loan['phone']}', style: const TextStyle(color: Colors.white)),
+            Text('Occupation: ${loan['occupation']}', style: const TextStyle(color: Colors.white)),
+            Text('Monthly Income: ₹${loan['monthly_income']}', style: const TextStyle(color: Colors.white)),
+            Text('Loan Amount: ₹${loan['loan_amount']}', style: const TextStyle(color: Colors.white)),
+            Text('Purpose: ${loan['loan_purpose']}', style: const TextStyle(color: Colors.white)),
+            Text('Status: ${loan['status']}', style: const TextStyle(color: Colors.white)),
+            Text('Applied At: ${loan['created_at']}', style: const TextStyle(color: Colors.white)),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+                  onPressed: () {
+                    launchUrl(Uri.parse(loan['aadhaar_url']));
+                  },
+                  icon: const Icon(Icons.download),
+                  label: const Text('Download Aadhaar'),
+                ),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
+                  onPressed: () {
+                    launchUrl(Uri.parse(loan['pan_url']));
+                  },
+                  icon: const Icon(Icons.download),
+                  label: const Text('Download PAN'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -127,13 +238,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             itemBuilder: (context, index) {
               final loan = loans[index];
               final referredById = loan['referred_by']?.toString();
-String merchantName = merchantNames[referredById] ?? '';
+              String merchantName = merchantNames[referredById] ?? '';
 
-if (merchantName.isEmpty && merchantNames.isNotEmpty) {
-  print('📦 Loan: ${loan['id']} referred_by: ${loan['referred_by']} -> ${merchantNames[loan['referred_by']]}');
-
-}
-
+              if (merchantName.isEmpty && merchantNames.isNotEmpty) {
+                print('📦 Loan: ${loan['id']} referred_by: ${loan['referred_by']} -> ${merchantNames[loan['referred_by']]}');
+              }
 
               return Card(
                 margin: const EdgeInsets.all(10),
@@ -156,8 +265,7 @@ if (merchantName.isEmpty && merchantNames.isNotEmpty) {
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                          '₹${loan['loan_amount']} - ${loan['loan_purpose']}'),
+                      Text('₹${loan['loan_amount']} - ${loan['loan_purpose']}'),
                       if (merchantName.isNotEmpty)
                         Text('Referred by: $merchantName',
                             style: const TextStyle(fontSize: 12)),
@@ -171,14 +279,16 @@ if (merchantName.isEmpty && merchantNames.isNotEmpty) {
                       alignment: MainAxisAlignment.spaceBetween,
                       children: [
                         TextButton(
-                          onPressed: () =>
-                              updateLoanStatus(loan['id'], 'approved'),
+                          onPressed: () => updateLoanStatus(loan['id'], 'approved'),
                           child: const Text('Approve'),
                         ),
                         TextButton(
-                          onPressed: () =>
-                              updateLoanStatus(loan['id'], 'rejected'),
+                          onPressed: () => updateLoanStatus(loan['id'], 'rejected'),
                           child: const Text('Reject'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => showLoanDetails(loan),
+                          child: const Text('View'),
                         ),
                       ],
                     ),
@@ -198,6 +308,15 @@ if (merchantName.isEmpty && merchantNames.isNotEmpty) {
           title: const Text('NBFC Admin Dashboard'),
           actions: [
             IconButton(onPressed: viewProfile, icon: const Icon(Icons.person)),
+            IconButton(
+              icon: const Icon(Icons.notifications),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                );
+              },
+            ),
             IconButton(onPressed: logout, icon: const Icon(Icons.logout)),
             DropdownButton<String>(
               value: selectedStatus,
@@ -242,6 +361,16 @@ if (merchantName.isEmpty && merchantNames.isNotEmpty) {
     );
   }
 }
+
+Future<void> launchUrl(Uri url) async {
+  if (!await launch(url.toString())) {
+    throw 'Could not launch $url';
+  }
+}
+
+
+
+
 
 
 

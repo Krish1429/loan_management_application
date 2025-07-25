@@ -120,9 +120,13 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
       final aadhaarUrl = await uploadFile(aadhaarFile!, 'aadhaar_file');
       final panUrl = await uploadFile(panFile!, 'pan_file');
 
+      final userId = supabase.auth.currentUser!.id;
+      final userProfile = await supabase.from('user_profiles').select('username').eq('id', userId).single();
+      final merchantName = userProfile['username'];
+
       await supabase.from('loans').insert({
-        'user_id': supabase.auth.currentUser!.id,
-        'referred_by': supabase.auth.currentUser!.id,
+        'user_id': userId,
+        'referred_by': userId,
         'first_name': firstNameController.text.trim(),
         'last_name': lastNameController.text.trim(),
         'dob': dobController.text.trim(),
@@ -137,6 +141,15 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
         'aadhaar_url': aadhaarUrl,
         'pan_url': panUrl,
       });
+
+      final adminUsers = await supabase.from('user_profiles').select('id').eq('sign_up_as', 'NBFC Admin');
+      for (var admin in adminUsers) {
+        await supabase.from('notifications').insert({
+          'user_id': admin['id'],
+          'message': 'Merchant $merchantName referred a new loan.',
+          'type': 'loan',
+        });
+      }
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -175,7 +188,7 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'This field is required';
                   final cleaned = value.replaceAll(RegExp(r'\s+'), '');
-                  final aadhaarReg = RegExp(r'^\d{12}$');
+                  final aadhaarReg = RegExp(r'^\d{12}\$');
                   return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar number';
                 },
               ),
@@ -184,7 +197,7 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
                 decoration: const InputDecoration(labelText: 'PAN Number'),
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'This field is required';
-                  final panReg = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$');
+                  final panReg = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]\$');
                   return panReg.hasMatch(value) ? null : 'Enter valid PAN number (e.g., ABCDE1234F)';
                 },
               ),
