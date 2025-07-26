@@ -62,19 +62,22 @@ class _LoginPageState extends State<LoginPage> {
           );
         } else {
           if (role == 'Loan Borrower') {
-            Navigator.pushReplacement(
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (_) => const LoanBorrowerDashboard()),
+              (route) => false,
             );
           } else if (role == 'Merchant') {
-            Navigator.pushReplacement(
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (_) => const MerchantDashboardScreen()),
+              (route) => false,
             );
           } else if (role == 'NBFC Admin') {
-            Navigator.pushReplacement(
+            Navigator.pushAndRemoveUntil(
               context,
               MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+              (route) => false,
             );
           }
         }
@@ -88,6 +91,29 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => isLoading = false);
   }
 
+  Future<void> forgotPassword() async {
+    final email = emailController.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your email to reset password.')),
+      );
+      return;
+    }
+
+    try {
+      await supabase.auth.resetPasswordForEmail(email,
+          redirectTo: 'https://your-app-url.com/reset-password');
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password reset link sent to your email.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sending reset email: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -95,6 +121,7 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(
         backgroundColor: Colors.black,
         title: const Text('Login'),
+        automaticallyImplyLeading: false, // 👈 Hides back button
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
@@ -122,6 +149,18 @@ class _LoginPageState extends State<LoginPage> {
                 style: const TextStyle(color: Colors.white),
                 decoration: _inputDecoration('Password'),
                 validator: (val) => val!.length < 6 ? 'Min 6 characters' : null,
+              ),
+
+              // Forgot Password Button
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: forgotPassword,
+                  child: const Text(
+                    'Forgot Password?',
+                    style: TextStyle(color: Colors.deepPurpleAccent),
+                  ),
+                ),
               ),
               const SizedBox(height: 10),
 
@@ -188,4 +227,6 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
+
+
 
