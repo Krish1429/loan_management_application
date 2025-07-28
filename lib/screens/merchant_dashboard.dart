@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:loan_management_application/screens/notifications_screen.dart';
+import 'package:loan_management_application/screens/upload_documents_page.dart'; // ADD THIS
 import 'manage_products_screen.dart';
 import 'view_profile_screen.dart';
 import 'merchant_loans_screen.dart';
@@ -73,15 +74,38 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
         unreadCount = response.length;
       });
 
-      // Only show latest notification once
-      if (lastSeenNotificationId != response.first['id']) {
-        lastSeenNotificationId = response.first['id'];
+      // ✅ Show only latest notification once
+      final latest = response.first;
+      final message = latest['message'];
+      final loanId = latest['loan_id']; // ✅ required for navigation
+
+      if (lastSeenNotificationId != latest['id']) {
+        lastSeenNotificationId = latest['id'];
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(response.first['message']),
+              content: GestureDetector(
+                onTap: () {
+                  if (message == 'Loan Approved' && loanId != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => UploadDocumentsPage(loanId: loanId),
+                      ),
+                    );
+                  }
+                },
+                child: Text(
+                  message,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
               backgroundColor: Colors.deepPurple,
-              duration: const Duration(seconds: 3),
+              duration: const Duration(seconds: 5),
             ),
           );
         }
@@ -186,6 +210,7 @@ class _MerchantDashboardScreenState extends State<MerchantDashboardScreen> {
     );
   }
 }
+
 
 
 

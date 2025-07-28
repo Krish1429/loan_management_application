@@ -69,38 +69,43 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   }
 
   Future<void> updateLoanStatus(String loanId, String newStatus) async {
-    // Step 1: Update the loan status
-    await supabase.from('loans').update({'status': newStatus}).eq('id', loanId);
+  // Step 1: Update loan status
+  await supabase.from('loans').update({'status': newStatus}).eq('id', loanId);
 
-    // Step 2: Fetch the loan details
-    final loan = await supabase.from('loans').select().eq('id', loanId).single();
+  // Step 2: Fetch loan details
+  final loan = await supabase.from('loans').select().eq('id', loanId).single();
 
-    // Step 3: Notify the loan applicant
+  // Step 3: Notify the borrower
+  await supabase.from('notifications').insert({
+    'user_id': loan['user_id'],
+    'message': 'Your loan has been $newStatus.',
+    'type': 'loan',
+    'is_read': false,
+    'created_at': DateTime.now().toIso8601String(),
+  });
+
+  // ✅ Step 4: Notify merchant if referred
+  if (loan['referred_by'] != null && newStatus == 'approved') {
     await supabase.from('notifications').insert({
-      'user_id': loan['user_id'],
-      'message': 'Your loan has been $newStatus.',
+      'user_id': loan['referred_by'],
+      'message': 'Loan Approved - Upload documents now.',
       'type': 'loan',
+      'loan_id': loan['id'], // must include this
+      'is_read': false,
+      'created_at': DateTime.now().toIso8601String(),
     });
-
-    // Step 4: Notify the merchant if referred
-    if (loan['referred_by'] != null) {
-      await supabase.from('notifications').insert({
-        'user_id': loan['referred_by'],
-        'message':
-            'A loan you referred was $newStatus for ₹${loan['loan_amount']} (${loan['loan_purpose']}).',
-        'type': 'loan',
-      });
-    }
-
-    // Step 5: Refresh list
-    fetchLoans();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Loan marked as $newStatus')),
-      );
-    }
   }
+
+  // Step 5: Refresh UI
+  fetchLoans();
+
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Loan marked as $newStatus')),
+    );
+  }
+}
+
 
   void logout() async {
     await supabase.auth.signOut();
@@ -367,6 +372,39 @@ Future<void> launchUrl(Uri url) async {
     throw 'Could not launch $url';
   }
 }
+
+// ✅ Step 6: Send notification to merchant after approval
+Future<void> notifyMerchantOfApproval(String loanId) async {
+  try {
+    final loan = await supabase
+        .from('loans')
+        .select('referred_by')
+        .eq('id', loanId)
+        .maybeSingle();
+
+    if (loan == null || loan['referred_by'] == null) {
+      print('No referring merchant found for this loan.');
+      return;
+    }
+
+    final merchantId = loan['referred_by'];
+
+    await supabase.from('notifications').insert({
+  'user_id': merchantId,               // Referring merchant
+  'message': 'Loan Approved',
+  'loan_id': loanId,                   // ✅ Must include this
+  'type': 'loan',
+  'is_read': false,
+  'created_at': DateTime.now().toIso8601String(),
+});
+
+
+    print('Notification sent to merchant!');
+  } catch (e) {
+    print('Error sending merchant notification: $e');
+  }
+}
+
 
 
 
