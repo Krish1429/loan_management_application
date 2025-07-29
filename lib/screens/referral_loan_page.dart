@@ -188,7 +188,7 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'This field is required';
                   final cleaned = value.replaceAll(RegExp(r'\s+'), '');
-                  final aadhaarReg = RegExp(r'^\d{12}\$');
+                  final aadhaarReg = RegExp(r'^\d{12}$');
                   return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar number';
                 },
               ),
@@ -197,7 +197,7 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
                 decoration: const InputDecoration(labelText: 'PAN Number'),
                 validator: (value) {
                   if (value == null || value.isEmpty) return 'This field is required';
-                  final panReg = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]\$');
+                  final panReg = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$');
                   return panReg.hasMatch(value) ? null : 'Enter valid PAN number (e.g., ABCDE1234F)';
                 },
               ),

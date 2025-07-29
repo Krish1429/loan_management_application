@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../supabase_client.dart';
-import 'upload_documents_page.dart'; // Ensure this import exists
+import 'upload_documents_page.dart'; // Make sure this file exists
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -46,9 +46,12 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   void handleNotificationTap(Map<String, dynamic> notification) async {
+    print("Tapped Notification: $notification"); // ✅ DEBUG LOG
+
     final loanId = notification['loan_id'];
     final type = notification['type'];
 
+    // Handle only loan-type notifications with valid loan_id
     if (type != 'loan' || loanId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No Loan ID found for this notification')),
@@ -85,7 +88,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         );
       }
     } catch (e) {
-      print('Error: $e');
+      print('Error checking loan status: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error checking loan status')),
       );
@@ -107,8 +110,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     return GestureDetector(
                       onTap: () => handleNotificationTap(n),
                       child: Card(
-                        margin:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         child: ListTile(
                           leading: const Icon(Icons.notifications_active),
                           title: Text(n['message'] ?? ''),
