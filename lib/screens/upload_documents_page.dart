@@ -40,7 +40,11 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     try {
       final loan = await Supabase.instance.client
           .from('loans')
-          .select('status')
+          .select('''
+            *,
+            borrower:user_profiles!loans_user_id_fkey(name, address),
+            merchant:user_profiles!fk_referred_by(username)
+          ''')
           .eq('id', widget.loanId)
           .maybeSingle();
 
@@ -182,4 +186,5 @@ class _UploadDocumentsPageState extends State<UploadDocumentsPage> {
     );
   }
 }
+
 

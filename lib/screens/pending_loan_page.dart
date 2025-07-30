@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../supabase_client.dart';
-import 'loan_details_page.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../supabase_client.dart';
 
 class PendingLoansPage extends StatefulWidget {
   const PendingLoansPage({super.key});
@@ -13,17 +13,6 @@ class _PendingLoansPageState extends State<PendingLoansPage> {
   List<Map<String, dynamic>> loans = [];
   bool isLoading = true;
 
-  String selectedPurpose = 'All';
-  final List<String> loanPurposes = [
-    'All',
-    'Personal Loan',
-    'Home Loan',
-    'Educational Loan',
-    'Medical Loan',
-    'Vehicle Loan',
-    'Business Loan',
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -33,110 +22,106 @@ class _PendingLoansPageState extends State<PendingLoansPage> {
   Future<void> fetchPendingLoans() async {
     setState(() => isLoading = true);
 
-    var query = supabase
-        .from('loans')
-        .select()
-        .eq('status', 'pending');
+    try {
+      final response = await supabase
+          .from('loans')
+          .select('''
+            *,
+            borrower:user_profiles!loans_user_id_fkey(name, address),
+            merchant:user_profiles!fk_referred_by(username)
+          ''')
+          .eq('status', 'pending')
+          .order('created_at', ascending: false);
 
-    if (selectedPurpose != 'All') {
-      query = query.eq('loan_purpose', selectedPurpose);
+      setState(() {
+        loans = List<Map<String, dynamic>>.from(response);
+        isLoading = false;
+      });
+    } catch (e) {
+      print('Error fetching loans: $e');
+      setState(() => isLoading = false);
     }
-
-    final response = await query.order('created_at', ascending: false);
-
-    setState(() {
-      loans = List<Map<String, dynamic>>.from(response);
-      isLoading = false;
-    });
   }
 
-  Future<void> updateLoanStatus(String loanId, String newStatus) async {
-    await supabase
-        .from('loans')
-        .update({'status': newStatus})
-        .eq('id', loanId);
+  Future<void> updateLoanStatus(String loanId, String status) async {
+    try {
+      await supabase.from('loans').update({'status': status}).eq('id', loanId);
+      fetchPendingLoans();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Loan $status')),
+      );
+    } catch (e) {
+      print('Error updating loan: $e');
+    }
+  }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Loan marked as $newStatus')),
+  Widget buildDataTable() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columnSpacing: 18,
+        headingRowColor: MaterialStateColor.resolveWith((_) => Colors.black),
+        dataRowColor: MaterialStateColor.resolveWith((_) => Colors.grey[850]!),
+        headingTextStyle: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        dataTextStyle: const TextStyle(color: Colors.white70),
+        columns: const [
+          DataColumn(label: Text('Name')),
+          DataColumn(label: Text('Address')),
+          DataColumn(label: Text('Loan Amount')),
+          DataColumn(label: Text('Purpose')),
+          DataColumn(label: Text('Merchant')),
+          DataColumn(label: Text('Date')),
+          DataColumn(label: Text('Actions')),
+        ],
+        rows: loans.map((loan) {
+          final borrower = loan['borrower'];
+          final merchant = loan['merchant'];
+          return DataRow(cells: [
+            DataCell(Text(borrower?['name'] ?? '-')),
+            DataCell(Text(borrower?['address'] ?? '-')),
+            DataCell(Text('₹${loan['loan_amount'].toString()}')),
+            DataCell(Text(loan['loan_purpose'] ?? '-')),
+            DataCell(Text(merchant?['username'] ?? 'Direct')),
+            DataCell(Text(loan['created_at'].toString().substring(0, 10))),
+            DataCell(Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.check, color: Colors.green),
+                  onPressed: () => updateLoanStatus(loan['id'], 'approved'),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.red),
+                  onPressed: () => updateLoanStatus(loan['id'], 'rejected'),
+                ),
+              ],
+            )),
+          ]);
+        }).toList(),
+      ),
     );
-
-    fetchPendingLoans();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pending Loans')),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8),
-            child: DropdownButtonFormField<String>(
-              value: selectedPurpose,
-              decoration: const InputDecoration(
-                labelText: 'Filter by Loan Purpose',
-                border: OutlineInputBorder(),
-              ),
-              items: loanPurposes.map((purpose) {
-                return DropdownMenuItem(
-                  value: purpose,
-                  child: Text(purpose),
-                );
-              }).toList(),
-              onChanged: (value) {
-                setState(() {
-                  selectedPurpose = value!;
-                });
-                fetchPendingLoans();
-              },
-            ),
-          ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : loans.isEmpty
-                    ? const Center(child: Text("No pending loans"))
-                    : ListView.builder(
-                        itemCount: loans.length,
-                        itemBuilder: (context, index) {
-                          final loan = loans[index];
-                          return Card(
-                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            child: ListTile(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => LoanDetailsPage(loanId: loan['id']),
-                                  ),
-                                );
-                              },
-                              title: Text('₹${loan['loan_amount']} - ${loan['loan_purpose']}'),
-                              subtitle: Text('Requested on: ${loan['created_at'].toString().substring(0, 10)}'),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.check_circle, color: Colors.green),
-                                    tooltip: "Approve",
-                                    onPressed: () => updateLoanStatus(loan['id'], 'approved'),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.cancel, color: Colors.redAccent),
-                                    tooltip: "Reject",
-                                    onPressed: () => updateLoanStatus(loan['id'], 'rejected'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
+      backgroundColor: const Color(0xFF1A171E),
+      appBar: AppBar(
+        title: const Text('Pending Loans'),
+        backgroundColor: Colors.black,
       ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : loans.isEmpty
+              ? const Center(
+                  child: Text('No pending loans', style: TextStyle(color: Colors.white70)),
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: buildDataTable(),
+                ),
     );
   }
 }
+
 
 

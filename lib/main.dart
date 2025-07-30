@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'screens/sign_up_page.dart'; // adjust path if needed
-import 'supabase_client.dart';      // your Supabase config
-import 'screens/reset_password_screen.dart'; // ✅ You need this screen
+import 'screens/merchant_dashboard.dart';
+import 'screens/loan_borrower_dashboard.dart';
+import 'screens/admin_dashboard.dart';
+import 'screens/login_page.dart';
+import 'supabase_client.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +17,7 @@ void main() async {
   runApp(const MyApp());
 }
 
+// ✅ Make it a StatefulWidget so we can use state logic safely
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -23,36 +26,68 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  final _navigatorKey = GlobalKey<NavigatorState>();
+  bool _loading = true;
+  Widget _redirectWidget = const LoginPage();
 
   @override
   void initState() {
     super.initState();
+    checkLoginAndRole();
+  }
 
-    // ✅ Listen to auth state changes
-    Supabase.instance.client.auth.onAuthStateChange.listen((data) {
-      final event = data.event;
+  Future<void> checkLoginAndRole() async {
+    final session = Supabase.instance.client.auth.currentSession;
 
-      if (event == AuthChangeEvent.passwordRecovery) {
-        // 🔁 Navigate to password reset screen
-        _navigatorKey.currentState?.push(
-          MaterialPageRoute(builder: (_) => const ResetPasswordScreen()),
-        );
+    if (session != null) {
+      final userId = session.user.id;
+
+      final profile = await supabase
+          .from('user_profiles')
+          .select('sign_up_as')
+          .eq('id', userId)
+          .maybeSingle();
+
+      final role = profile?['sign_up_as'];
+
+      Widget target;
+      if (role == 'merchant') {
+        target = const MerchantDashboardScreen(); // ✅ NEW merchant sidebar
+      } else if (role == 'loan_borrower') {
+        target = const LoanBorrowerDashboard();
+      } else if (role == 'nbfc_admin') {
+        target = const AdminDashboardScreen();
+      } else {
+        target = const LoginPage(); // fallback
       }
-    });
+
+      setState(() {
+        _redirectWidget = target;
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _redirectWidget = const LoginPage();
+        _loading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Loan Management App',
-      theme: ThemeData.dark(),
-      navigatorKey: _navigatorKey, // ✅ Needed for deep link routing
       debugShowCheckedModeBanner: false,
-      home: const SignUpPage(),
+      theme: ThemeData.dark(),
+      home: _loading
+          ? const Scaffold(
+              backgroundColor: Colors.black,
+              body: Center(child: CircularProgressIndicator()),
+            )
+          : _redirectWidget,
     );
   }
 }
+
 
 
 
