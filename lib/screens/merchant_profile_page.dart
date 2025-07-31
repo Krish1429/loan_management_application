@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../supabase_client.dart';
-import 'login_page.dart';
 
 class MerchantProfilePage extends StatefulWidget {
   const MerchantProfilePage({super.key});
@@ -12,8 +10,18 @@ class MerchantProfilePage extends StatefulWidget {
 
 class _MerchantProfilePageState extends State<MerchantProfilePage> {
   final supabase = Supabase.instance.client;
-  Map<String, dynamic>? profile;
+
+  final _formKey = GlobalKey<FormState>();
   bool isLoading = true;
+  bool isSaving = false;
+
+  // Controllers for editable fields
+  final nameController = TextEditingController();
+  final phoneController = TextEditingController();
+  final emailController = TextEditingController();
+  final shopNameController = TextEditingController();
+  final addressController = TextEditingController();
+  final gstNumberController = TextEditingController();
 
   @override
   void initState() {
@@ -22,129 +30,171 @@ class _MerchantProfilePageState extends State<MerchantProfilePage> {
   }
 
   Future<void> fetchProfile() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return;
 
-    final data = await supabase
-        .from('user_profiles')
-        .select('username, email, phone, age')
-        .eq('id', user.id)
-        .single();
-
-    setState(() {
-      profile = data;
-      isLoading = false;
-    });
-  }
-
-  Future<void> updateEmail(String newEmail) async {
     try {
-      await supabase.auth.updateUser(UserAttributes(email: newEmail));
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email updated')),
-      );
-      fetchProfile();
+      final data = await supabase
+          .from('user_profiles')
+          .select()
+          .eq('id', userId)
+          .single();
+
+      setState(() {
+        nameController.text = data['username'] ?? '';
+        phoneController.text = data['phone'] ?? '';
+        emailController.text = data['email'] ?? '';
+        shopNameController.text = data['shop_name'] ?? '';
+        addressController.text = data['address'] ?? '';
+        gstNumberController.text = data['gst_number'] ?? '';
+        isLoading = false;
+      });
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error updating email: $e')),
-      );
+      print('Error fetching profile: $e');
+      setState(() {
+        isLoading = false;
+      });
     }
   }
 
-  Future<void> showEditEmailDialog() async {
-    final controller = TextEditingController(text: profile?['email']);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Email'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(labelText: 'New Email'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              updateEmail(controller.text.trim());
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
+  Future<void> saveProfile() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => isSaving = true);
+
+    try {
+      final userId = supabase.auth.currentUser!.id;
+      final updates = {
+        'username': nameController.text.trim(),
+        'phone': phoneController.text.trim(),
+        'email': emailController.text.trim(),
+        'shop_name': shopNameController.text.trim(),
+        'address': addressController.text.trim(),
+        'gst_number': gstNumberController.text.trim(),
+      };
+
+      await supabase.from('user_profiles').update(updates).eq('id', userId);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Profile updated successfully')),
+      );
+
+      fetchProfile();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to save profile: $e')),
+      );
+    }
+
+    setState(() => isSaving = false);
   }
 
   void logout() async {
     await supabase.auth.signOut();
-    if (!mounted) return;
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginPage()),
-      (route) => false,
-    );
+    if (context.mounted) {
+      Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A171E),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('My Profile',
-                style: TextStyle(color: Colors.white, fontSize: 24)),
-            const SizedBox(height: 20),
-            profileTile('Name', profile?['username']),
-            profileTile('Email', profile?['email']),
-            profileTile('Phone', profile?['phone']),
-            profileTile('Age', profile?['age']?.toString()),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: showEditEmailDialog,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-              icon: const Icon(Icons.edit),
-              label: const Text('Edit Email'),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: logout,
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void dispose() {
+    nameController.dispose();
+    phoneController.dispose();
+    emailController.dispose();
+    shopNameController.dispose();
+    addressController.dispose();
+    gstNumberController.dispose();
+    super.dispose();
   }
 
-  Widget profileTile(String title, String? value) {
+ @override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFF121212),
+    appBar: AppBar(
+      title: const Text('My Profile'),
+      backgroundColor: Colors.black,
+    ),
+    body: isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : Padding(
+            padding: const EdgeInsets.all(16),
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                children: [
+                  _buildTextField('Name', nameController),
+                  _buildTextField('Phone', phoneController,
+                      keyboardType: TextInputType.phone),
+                  _buildTextField('Email', emailController,
+                      keyboardType: TextInputType.emailAddress),
+                  _buildTextField('Shop Name', shopNameController),
+                  _buildTextField('Address', addressController, maxLines: 3),
+                  _buildTextField('GST Number', gstNumberController),
+                  const SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: isSaving ? null : saveProfile,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.deepPurple[400],
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: isSaving
+                          ? const SizedBox(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text('Save Changes'),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  OutlinedButton.icon(
+                    onPressed: logout,
+                    icon: const Icon(Icons.logout),
+                    label: const Text('Logout'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(color: Colors.redAccent),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+  );
+}
+
+
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller, {
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+  }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: ListTile(
-        tileColor: Colors.grey[900],
-        title: Text(title, style: const TextStyle(color: Colors.white70)),
-        subtitle: Text(value ?? 'N/A', style: const TextStyle(color: Colors.white)),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        maxLines: maxLines,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Colors.white70),
+          enabledBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.white30),
+          ),
+          focusedBorder: const OutlineInputBorder(
+            borderSide: BorderSide(color: Colors.amber),
+          ),
+        ),
+        validator: (value) =>
+            (value == null || value.isEmpty) ? 'This field is required' : null,
       ),
     );
   }

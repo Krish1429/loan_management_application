@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:loan_management_application/screens/merchant_dashboard_screen.dart';
+import 'package:loan_management_application/screens/merchant_loans_page.dart'; // ✅ NEW screen
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'screens/merchant_dashboard.dart';
-import 'screens/loan_borrower_dashboard.dart';
+
 import 'screens/admin_dashboard.dart';
 import 'screens/login_page.dart';
 import 'supabase_client.dart';
@@ -17,7 +18,6 @@ void main() async {
   runApp(const MyApp());
 }
 
-// ✅ Make it a StatefulWidget so we can use state logic safely
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
 
@@ -51,9 +51,9 @@ class _MyAppState extends State<MyApp> {
 
       Widget target;
       if (role == 'merchant') {
-        target = const MerchantDashboardScreen(); // ✅ NEW merchant sidebar
+        target = const MerchantDashboardScreen();
       } else if (role == 'loan_borrower') {
-        target = const LoanBorrowerDashboard();
+        target = const MerchantLoansPage(); // ✅ Updated screen for borrower
       } else if (role == 'nbfc_admin') {
         target = const AdminDashboardScreen();
       } else {

@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../supabase_client.dart';
 
 class ReferralLoanPage extends StatefulWidget {
   const ReferralLoanPage({super.key});
@@ -24,7 +23,7 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
   final panNumberController = TextEditingController();
   final occupationController = TextEditingController();
   final incomeController = TextEditingController();
-  final amountController = TextEditingController(text: '0');
+  final amountController = TextEditingController(text: '5000');
   final purposeController = TextEditingController();
 
   File? aadhaarFile;
@@ -32,7 +31,7 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
   String? aadhaarFileName;
   String? panFileName;
 
-  double loanAmount = 0;
+  double loanAmount = 5000;
 
   final List<String> loanTypes = [
     'Home Loan',
@@ -42,6 +41,8 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
     'Vehicle Loan',
     'Medical Loan',
   ];
+
+  final supabase = Supabase.instance.client;
 
   Future<void> pickFile(bool isAadhaar) async {
     final result = await FilePicker.platform.pickFiles(
@@ -67,10 +68,11 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
     final storage = supabase.storage.from('documents');
 
     final response = await storage.upload(path, file, fileOptions: const FileOptions(upsert: true));
-    if (response.isEmpty) return null;
-
-    final url = storage.getPublicUrl(path);
-    return url;
+    if (response.isEmpty) {
+      // Upload success returns empty string per docs
+      return storage.getPublicUrl(path);
+    }
+    return null;
   }
 
   Future<void> submitLoan() async {
@@ -117,14 +119,26 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
     setState(() => isLoading = true);
 
     try {
-      final aadhaarUrl = await uploadFile(aadhaarFile!, 'aadhaar_file');
-      final panUrl = await uploadFile(panFile!, 'pan_file');
+      final aadhaarUrl = await uploadFile(aadhaarFile!, aadhaarFileName ?? 'aadhaar.pdf');
+      final panUrl = await uploadFile(panFile!, panFileName ?? 'pan.pdf');
+
+      if (aadhaarUrl == null || panUrl == null) {
+        throw Exception('Failed to upload documents');
+      }
 
       final userId = supabase.auth.currentUser!.id;
-      final userProfile = await supabase.from('user_profiles').select('username').eq('id', userId).single();
-      final merchantName = userProfile['username'];
 
-      await supabase.from('loans').insert({
+      // Fetch merchant name from user_profiles table
+      final userProfileResponse = await supabase
+          .from('user_profiles')
+          .select('username')
+          .eq('id', userId)
+          .single();
+
+      final merchantName = userProfileResponse.data?['username'] ?? 'Unknown';
+
+      // Insert loan record
+      final insertResponse = await supabase.from('loans').insert({
         'user_id': userId,
         'referred_by': userId,
         'first_name': firstNameController.text.trim(),
@@ -142,29 +156,73 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
         'pan_url': panUrl,
       });
 
-      final adminUsers = await supabase.from('user_profiles').select('id').eq('sign_up_as', 'NBFC Admin');
-      for (var admin in adminUsers) {
-        await supabase.from('notifications').insert({
-          'user_id': admin['id'],
-          'message': 'Merchant $merchantName referred a new loan.',
-          'type': 'loan',
-        });
+      // Notify admin users
+      final adminUsersResponse = await supabase
+          .from('user_profiles')
+          .select('id')
+          .eq('sign_up_as', 'NBFC Admin');
+
+      if (adminUsersResponse.error == null) {
+        final adminUsers = adminUsersResponse.data as List<dynamic>;
+        for (var admin in adminUsers) {
+          await supabase.from('notifications').insert({
+            'user_id': admin['id'],
+            'message': 'Merchant $merchantName referred a new loan.',
+            'type': 'loan',
+          });
+        }
       }
 
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Referral loan submitted')),
+          const SnackBar(content: Text('Referral loan submitted successfully')),
         );
         Navigator.pop(context);
       }
     } catch (e) {
       debugPrint('Error submitting referral loan: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Submission failed')),
+        SnackBar(content: Text('Submission failed: $e')),
       );
     }
 
     setState(() => isLoading = false);
+  }
+
+  String? _required(String? value) {
+    if (value == null || value.isEmpty) return 'This field is required';
+    return null;
+  }
+
+  Future<void> _selectDate(BuildContext context) async {
+    DateTime initialDate = DateTime.now().subtract(const Duration(days: 365 * 18)); // 18 years ago
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1900),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        dobController.text = picked.toIso8601String().split('T').first; // YYYY-MM-DD
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    firstNameController.dispose();
+    lastNameController.dispose();
+    dobController.dispose();
+    phoneController.dispose();
+    addressController.dispose();
+    aadhaarNumberController.dispose();
+    panNumberController.dispose();
+    occupationController.dispose();
+    incomeController.dispose();
+    amountController.dispose();
+    purposeController.dispose();
+    super.dispose();
   }
 
   @override
@@ -177,11 +235,43 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
           key: _formKey,
           child: Column(
             children: [
-              TextFormField(controller: firstNameController, decoration: const InputDecoration(labelText: 'First Name'), validator: _required),
-              TextFormField(controller: lastNameController, decoration: const InputDecoration(labelText: 'Last Name'), validator: _required),
-              TextFormField(controller: dobController, decoration: const InputDecoration(labelText: 'Date of Birth (YYYY-MM-DD)'), validator: _required),
-              TextFormField(controller: phoneController, decoration: const InputDecoration(labelText: 'Phone Number'), validator: _required),
-              TextFormField(controller: addressController, decoration: const InputDecoration(labelText: 'Address'), validator: _required),
+              TextFormField(
+                controller: firstNameController,
+                decoration: const InputDecoration(labelText: 'First Name'),
+                validator: _required,
+              ),
+              TextFormField(
+                controller: lastNameController,
+                decoration: const InputDecoration(labelText: 'Last Name'),
+                validator: _required,
+              ),
+              TextFormField(
+                controller: dobController,
+                decoration: InputDecoration(
+                  labelText: 'Date of Birth (YYYY-MM-DD)',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.calendar_today),
+                    onPressed: () => _selectDate(context),
+                  ),
+                ),
+                readOnly: true,
+                validator: (value) {
+                  if (value == null || value.isEmpty) return 'This field is required';
+                  // You could add more date validation here
+                  return null;
+                },
+              ),
+              TextFormField(
+                controller: phoneController,
+                decoration: const InputDecoration(labelText: 'Phone Number'),
+                validator: _required,
+                keyboardType: TextInputType.phone,
+              ),
+              TextFormField(
+                controller: addressController,
+                decoration: const InputDecoration(labelText: 'Address'),
+                validator: _required,
+              ),
               TextFormField(
                 controller: aadhaarNumberController,
                 decoration: const InputDecoration(labelText: 'Aadhaar Number'),
@@ -191,6 +281,7 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
                   final aadhaarReg = RegExp(r'^\d{12}$');
                   return aadhaarReg.hasMatch(cleaned) ? null : 'Enter valid 12-digit Aadhaar number';
                 },
+                keyboardType: TextInputType.number,
               ),
               TextFormField(
                 controller: panNumberController,
@@ -200,18 +291,28 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
                   final panReg = RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$');
                   return panReg.hasMatch(value) ? null : 'Enter valid PAN number (e.g., ABCDE1234F)';
                 },
+                textCapitalization: TextCapitalization.characters,
               ),
-              TextFormField(controller: occupationController, decoration: const InputDecoration(labelText: 'Occupation'), validator: _required),
-              TextFormField(controller: incomeController, decoration: const InputDecoration(labelText: 'Monthly Income'), keyboardType: TextInputType.number, validator: _required),
+              TextFormField(
+                controller: occupationController,
+                decoration: const InputDecoration(labelText: 'Occupation'),
+                validator: _required,
+              ),
+              TextFormField(
+                controller: incomeController,
+                decoration: const InputDecoration(labelText: 'Monthly Income'),
+                keyboardType: TextInputType.number,
+                validator: _required,
+              ),
 
               const SizedBox(height: 16),
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Loan Amount (₹0 - ₹65,000)', style: TextStyle(fontSize: 16)),
+                child: Text('Loan Amount (₹5,000 - ₹65,000)', style: TextStyle(fontSize: 16)),
               ),
               Slider(
                 value: loanAmount,
-                min: 0,
+                min: 5000,
                 max: 65000,
                 divisions: 13,
                 label: '₹${loanAmount.toInt()}',
@@ -225,45 +326,61 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
 
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Loan Purpose'),
-                value: purposeController.text.isNotEmpty ? purposeController.text : null,
-                items: loanTypes.map((type) {
-                  return DropdownMenuItem(
-                    value: type,
-                    child: Text(type),
-                  );
-                }).toList(),
+                items: loanTypes
+                    .map((type) => DropdownMenuItem(value: type, child: Text(type)))
+                    .toList(),
                 onChanged: (value) {
                   setState(() {
-                    purposeController.text = value!;
+                    purposeController.text = value ?? '';
                   });
                 },
-                validator: (value) => value == null || value.isEmpty ? 'Please select loan purpose' : null,
+                validator: (value) {
+                  if (value == null || value.isEmpty) return 'Please select a loan purpose';
+                  return null;
+                },
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
+
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.upload_file),
+                      label: Text(aadhaarFileName ?? 'Upload Aadhaar (PDF)'),
                       onPressed: () => pickFile(true),
-                      icon: const Icon(Icons.file_upload),
-                      label: Text(aadhaarFileName != null ? 'Aadhaar: $aadhaarFileName' : 'Upload Aadhaar'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.upload_file),
+                      label: Text(panFileName ?? 'Upload PAN (PDF)'),
                       onPressed: () => pickFile(false),
-                      icon: const Icon(Icons.file_upload),
-                      label: Text(panFileName != null ? 'PAN: $panFileName' : 'Upload PAN'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: isLoading ? null : submitLoan,
-                child: isLoading ? const CircularProgressIndicator() : const Text('Submit Referral'),
+
+              const SizedBox(height: 30),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : submitLoan,
+                  child: isLoading
+                      ? const SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Submit Referral'),
+                ),
               ),
             ],
           ),
@@ -271,12 +388,9 @@ class _ReferralLoanPageState extends State<ReferralLoanPage> {
       ),
     );
   }
-
-  String? _required(String? value) {
-    if (value == null || value.isEmpty) return 'This field is required';
-    return null;
-  }
 }
+
+
 
 
 // ✅ You can now copy/paste this into ApplyLoanPage with just one change:

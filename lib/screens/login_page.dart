@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:loan_management_application/screens/merchant_dashboard_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../supabase_client.dart';
 import '../screens/sign_up_page.dart';
 import 'loan_borrower_dashboard.dart';
-import 'merchant_dashboard.dart';
+
 import 'admin_dashboard.dart';
 
 class LoginPage extends StatefulWidget {
